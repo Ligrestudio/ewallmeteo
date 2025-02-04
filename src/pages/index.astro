@@ -77,14 +77,6 @@ const data = await fetchWeatherData();
     li {
       margin: 0.5rem 0;
     }
-	.error-message {
-    background-color: #ffebee;
-    color: #c62828;
-    padding: 1rem;
-    margin: 1rem;
-    border-radius: 4px;
-    text-align: center;
-  }
   </style>
 
 <script>
@@ -94,11 +86,12 @@ const data = await fetchWeatherData();
   
 	async function updateData() {
 	  try {
-		// Intentar primero con fetch normal
-		const response = await fetch('https://www.gotafreda.es/estacions/c05m085e03/avamet.htm', {
-		  mode: 'cors',  // Intentar con CORS
+		// Usar CORS Anywhere como proxy
+		const proxyUrl = 'https://cors-anywhere.herokuapp.com/https://www.gotafreda.es/estacions/c05m085e03/avamet.htm';
+		
+		const response = await fetch(proxyUrl, {
 		  headers: {
-			'Accept': 'text/plain'
+			'Origin': window.location.origin
 		  }
 		});
   
@@ -109,79 +102,53 @@ const data = await fetchWeatherData();
 		const text = await response.text();
 		const data: WeatherData = {};
 		
-		// Solo procesar si tenemos texto válido
 		if (text && text.includes('|')) {
 		  text.split('|').forEach(pair => {
+			if (!pair) return;
 			const [key, value] = pair.split('=');
 			if (key && value) {
-			  data[key] = value;
+			  // Limpiamos los posibles espacios en blanco
+			  data[key.trim()] = value.trim();
 			}
 		  });
   
-		  // Actualizar la UI solo si tenemos datos válidos
-		  Object.keys(data).forEach(key => {
-			const element = document.querySelector(`#${key}`);
-			if (element) {
-			  let value = data[key];
-			  // Añadir unidades según el tipo de dato
-			  if (key.includes('temp')) value += '°C';
-			  else if (key === 'hrel') value += '%';
-			  else if (key === 'pres') value += ' hPa';
-			  else if (key.includes('vent')) value += key === 'vent_dir' ? '°' : ' km/h';
-			  else if (key.includes('prec')) value += ' mm';
-			  
-			  element.textContent = value;
-			}
-		  });
+		  // Debug: mostrar datos recibidos en consola
+		  console.log('Datos recibidos:', data);
   
-		  // Actualizar timestamp de última actualización
-		  const timestampElement = document.querySelector('#timestamp');
-		  if (timestampElement) {
-			timestampElement.textContent = new Date().toLocaleString();
+		  // Actualizar solo los elementos que existen
+		  const updateElement = (id: string, value: string, unit: string) => {
+			const element = document.querySelector(`#${id}`);
+			if (element && value) {
+			  element.textContent = `${value}${unit}`;
+			}
+		  };
+  
+		  // Actualizar cada tipo de dato específicamente
+		  updateElement('temp', data.temp, '°C');
+		  updateElement('temp_max', data.temp_max, '°C');
+		  updateElement('temp_min', data.temp_min, '°C');
+		  updateElement('hrel', data.hrel, '%');
+		  updateElement('pres', data.pres, ' hPa');
+		  updateElement('vent', data.vent, ' km/h');
+		  updateElement('vent_dir', data.vent_dir, '°');
+		  // Corregimos específicamente el viento máximo
+		  updateElement('vent_max', data.vent_max, ' km/h');
+		  updateElement('prec', data.prec, ' mm');
+		  updateElement('prec_mes', data.prec_mes, ' mm');
+		  updateElement('prec_any', data.prec_any, ' mm');
+		  updateElement('last_update', data.data, '');
+  
+		  // Remover mensaje de error si existe
+		  const errorElement = document.querySelector('.error-message');
+		  if (errorElement) {
+			errorElement.remove();
 		  }
 		}
 	  } catch (error) {
-		console.error('Error fetching data:', error);
+		console.error('Error fetcheando datos:', error);
 		
-		// Si hay error de CORS, intentar con un proxy
-		try {
-		  const proxyUrl = 'https://api.allorigins.win/raw?url=' + 
-			encodeURIComponent('https://www.gotafreda.es/estacions/c05m085e03/avamet.htm');
-		  
-		  const proxyResponse = await fetch(proxyUrl);
-		  if (!proxyResponse.ok) {
-			throw new Error(`Proxy HTTP error! status: ${proxyResponse.status}`);
-		  }
-  
-		  const text = await proxyResponse.text();
-		  // ... mismo procesamiento de datos que arriba ...
-		  const data: WeatherData = {};
-		  
-		  if (text && text.includes('|')) {
-			text.split('|').forEach(pair => {
-			  const [key, value] = pair.split('=');
-			  if (key && value) {
-				data[key] = value;
-			  }
-			});
-  
-			Object.keys(data).forEach(key => {
-			  const element = document.querySelector(`#${key}`);
-			  if (element) {
-				let value = data[key];
-				if (key.includes('temp')) value += '°C';
-				else if (key === 'hrel') value += '%';
-				else if (key === 'pres') value += ' hPa';
-				else if (key.includes('vent')) value += key === 'vent_dir' ? '°' : ' km/h';
-				else if (key.includes('prec')) value += ' mm';
-				
-				element.textContent = value;
-			  }
-			});
-		  }
-		} catch (proxyError) {
-		  console.error('Error con el proxy:', proxyError);
-		  // Mostrar mensaje de error en la UI
+		// Mostrar mensaje de error solo si no existe ya
+		if (!document.querySelector('.error-message')) {
 		  const errorElement = document.createElement('div');
 		  errorElement.className = 'error-message';
 		  errorElement.textContent = 'Error al cargar los datos. Por favor, intenta más tarde.';
@@ -194,20 +161,31 @@ const data = await fetchWeatherData();
 	function startUpdates() {
 	  updateData(); // Primera actualización inmediata
 	  
-	  // Configurar intervalo para actualizaciones posteriores
+	  // Actualizar cada 5 minutos
 	  const intervalId = setInterval(updateData, 5 * 60 * 1000);
 	  
-	  // Guardar el ID del intervalo para poder limpiarlo si es necesario
+	  // Limpiar intervalo cuando se cierre la página
 	  window.addEventListener('beforeunload', () => {
 		clearInterval(intervalId);
 	  });
 	}
   
-	// Iniciar actualizaciones cuando el DOM esté listo
+	// Iniciar las actualizaciones cuando el DOM esté listo
 	if (document.readyState === 'loading') {
 	  document.addEventListener('DOMContentLoaded', startUpdates);
 	} else {
 	  startUpdates();
 	}
   </script>
+  
+  <style>
+	.error-message {
+	  background-color: #ffebee;
+	  color: #c62828;
+	  padding: 1rem;
+	  margin: 1rem;
+	  border-radius: 4px;
+	  text-align: center;
+	}
+  </style>
 </Layout>
