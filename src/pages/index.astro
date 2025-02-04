@@ -77,6 +77,14 @@ const data = await fetchWeatherData();
     li {
       margin: 0.5rem 0;
     }
+	.error-message {
+    background-color: #ffebee;
+    color: #c62828;
+    padding: 1rem;
+    margin: 1rem;
+    border-radius: 4px;
+    text-align: center;
+  }
   </style>
 
 <script>
@@ -84,17 +92,33 @@ const data = await fetchWeatherData();
 	  [key: string]: string;
 	}
   
-	function updateData() {
-	  fetch('https://www.gotafreda.es/estacions/c05m085e03/avamet.htm')
-		.then(response => response.text())
-		.then(text => {
-		  const data: WeatherData = {};
+	async function updateData() {
+	  try {
+		// Intentar primero con fetch normal
+		const response = await fetch('https://www.gotafreda.es/estacions/c05m085e03/avamet.htm', {
+		  mode: 'cors',  // Intentar con CORS
+		  headers: {
+			'Accept': 'text/plain'
+		  }
+		});
+  
+		if (!response.ok) {
+		  throw new Error(`HTTP error! status: ${response.status}`);
+		}
+  
+		const text = await response.text();
+		const data: WeatherData = {};
+		
+		// Solo procesar si tenemos texto válido
+		if (text && text.includes('|')) {
 		  text.split('|').forEach(pair => {
 			const [key, value] = pair.split('=');
-			if (key) data[key] = value;
+			if (key && value) {
+			  data[key] = value;
+			}
 		  });
-		  
-		  // Actualizar cada elemento
+  
+		  // Actualizar la UI solo si tenemos datos válidos
 		  Object.keys(data).forEach(key => {
 			const element = document.querySelector(`#${key}`);
 			if (element) {
@@ -109,12 +133,81 @@ const data = await fetchWeatherData();
 			  element.textContent = value;
 			}
 		  });
-		})
-		.catch(error => console.error('Error:', error));
+  
+		  // Actualizar timestamp de última actualización
+		  const timestampElement = document.querySelector('#timestamp');
+		  if (timestampElement) {
+			timestampElement.textContent = new Date().toLocaleString();
+		  }
+		}
+	  } catch (error) {
+		console.error('Error fetching data:', error);
+		
+		// Si hay error de CORS, intentar con un proxy
+		try {
+		  const proxyUrl = 'https://api.allorigins.win/raw?url=' + 
+			encodeURIComponent('https://www.gotafreda.es/estacions/c05m085e03/avamet.htm');
+		  
+		  const proxyResponse = await fetch(proxyUrl);
+		  if (!proxyResponse.ok) {
+			throw new Error(`Proxy HTTP error! status: ${proxyResponse.status}`);
+		  }
+  
+		  const text = await proxyResponse.text();
+		  // ... mismo procesamiento de datos que arriba ...
+		  const data: WeatherData = {};
+		  
+		  if (text && text.includes('|')) {
+			text.split('|').forEach(pair => {
+			  const [key, value] = pair.split('=');
+			  if (key && value) {
+				data[key] = value;
+			  }
+			});
+  
+			Object.keys(data).forEach(key => {
+			  const element = document.querySelector(`#${key}`);
+			  if (element) {
+				let value = data[key];
+				if (key.includes('temp')) value += '°C';
+				else if (key === 'hrel') value += '%';
+				else if (key === 'pres') value += ' hPa';
+				else if (key.includes('vent')) value += key === 'vent_dir' ? '°' : ' km/h';
+				else if (key.includes('prec')) value += ' mm';
+				
+				element.textContent = value;
+			  }
+			});
+		  }
+		} catch (proxyError) {
+		  console.error('Error con el proxy:', proxyError);
+		  // Mostrar mensaje de error en la UI
+		  const errorElement = document.createElement('div');
+		  errorElement.className = 'error-message';
+		  errorElement.textContent = 'Error al cargar los datos. Por favor, intenta más tarde.';
+		  document.body.insertBefore(errorElement, document.body.firstChild);
+		}
+	  }
 	}
   
-	// Iniciar actualizaciones
-	updateData();
-	setInterval(updateData, 5 * 60 * 1000);
+	// Función para iniciar las actualizaciones
+	function startUpdates() {
+	  updateData(); // Primera actualización inmediata
+	  
+	  // Configurar intervalo para actualizaciones posteriores
+	  const intervalId = setInterval(updateData, 5 * 60 * 1000);
+	  
+	  // Guardar el ID del intervalo para poder limpiarlo si es necesario
+	  window.addEventListener('beforeunload', () => {
+		clearInterval(intervalId);
+	  });
+	}
+  
+	// Iniciar actualizaciones cuando el DOM esté listo
+	if (document.readyState === 'loading') {
+	  document.addEventListener('DOMContentLoaded', startUpdates);
+	} else {
+	  startUpdates();
+	}
   </script>
 </Layout>
