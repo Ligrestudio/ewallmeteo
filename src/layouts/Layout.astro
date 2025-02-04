@@ -1,0 +1,24 @@
+---
+const { title } = Astro.props;
+---
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>{title}</title>
+    <style>
+      .weather-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        padding: 1rem;
+      }
+      .weather-card {
+        padding: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

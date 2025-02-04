@@ -1,0 +1,120 @@
+---
+import Layout from '../layouts/Layout.astro';
+import WeatherCard from '../components/WeatherCard.astro';
+import { parseWeatherData } from '../utils/parseData';
+
+const DATA_URL = 'https://www.gotafreda.es/estacions/c05m085e03/avamet.htm';
+
+async function fetchWeatherData() {
+  try {
+    const response = await fetch(DATA_URL);
+    const text = await response.text();
+    return parseWeatherData(text);
+  } catch (error) {
+    console.error('Error fetching data:', error);
+    return null;
+  }
+}
+
+const data = await fetchWeatherData();
+---
+
+<Layout title="Estación Meteorológica">
+  <main>
+    <h1>Estación Meteorológica</h1>
+    <p>Última actualización: <span id="last_update">{data?.data || 'Cargando...'}</span></p>
+
+    <div class="weather-grid">
+      <WeatherCard title="Temperatura">
+        <ul>
+          <li>Actual: <span id="temp">{data?.temp || '--'}°C</span></li>
+          <li>Máxima: <span id="temp_max">{data?.temp_max || '--'}°C</span></li>
+          <li>Mínima: <span id="temp_min">{data?.temp_min || '--'}°C</span></li>
+        </ul>
+      </WeatherCard>
+
+      <WeatherCard title="Humedad y Presión">
+        <ul>
+          <li>Humedad: <span id="hrel">{data?.hrel || '--'}%</span></li>
+          <li>Presión: <span id="pres">{data?.pres || '--'} hPa</span></li>
+        </ul>
+      </WeatherCard>
+
+      <WeatherCard title="Viento">
+        <ul>
+          <li>Velocidad: <span id="vent">{data?.vent || '--'} km/h</span></li>
+          <li>Máximo: <span id="vent_max">{data?.vent_max || '--'} km/h</span></li>
+          <li>Dirección: <span id="vent_dir">{data?.vent_dir || '--'}°</span></li>
+        </ul>
+      </WeatherCard>
+
+      <WeatherCard title="Precipitación">
+        <ul>
+          <li>Actual: <span id="prec">{data?.prec || '--'} mm</span></li>
+          <li>Mensual: <span id="prec_mes">{data?.prec_mes || '--'} mm</span></li>
+          <li>Anual: <span id="prec_any">{data?.prec_any || '--'} mm</span></li>
+        </ul>
+      </WeatherCard>
+    </div>
+  </main>
+
+  <style>
+    .weather-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+      padding: 1rem;
+    }
+    .weather-card {
+      padding: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+    li {
+      margin: 0.5rem 0;
+    }
+  </style>
+
+<script>
+	interface WeatherData {
+	  [key: string]: string;
+	}
+  
+	function updateData() {
+	  fetch('https://www.gotafreda.es/estacions/c05m085e03/avamet.htm')
+		.then(response => response.text())
+		.then(text => {
+		  const data: WeatherData = {};
+		  text.split('|').forEach(pair => {
+			const [key, value] = pair.split('=');
+			if (key) data[key] = value;
+		  });
+		  
+		  // Actualizar cada elemento
+		  Object.keys(data).forEach(key => {
+			const element = document.querySelector(`#${key}`);
+			if (element) {
+			  let value = data[key];
+			  // Añadir unidades según el tipo de dato
+			  if (key.includes('temp')) value += '°C';
+			  else if (key === 'hrel') value += '%';
+			  else if (key === 'pres') value += ' hPa';
+			  else if (key.includes('vent')) value += key === 'vent_dir' ? '°' : ' km/h';
+			  else if (key.includes('prec')) value += ' mm';
+			  
+			  element.textContent = value;
+			}
+		  });
+		})
+		.catch(error => console.error('Error:', error));
+	}
+  
+	// Iniciar actualizaciones
+	updateData();
+	setInterval(updateData, 5 * 60 * 1000);
+  </script>
+</Layout>
